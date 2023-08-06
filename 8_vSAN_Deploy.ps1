@@ -1,6 +1,10 @@
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
 
+
+
 Connect-VIServer 10.55.232.5 -User 'administrator@vsphere.local' -password 'Password@123' -Force
+
+
 
 $Datacenter = "Datacenter-1"
 $Cluster = "Cluster-1"
@@ -8,8 +12,6 @@ $ESXHosts = "10.55.232.76", "10.55.232.80", "10.55.232.84"
 $ESXUser = "root"
 $ESXPWD = "Password@123"
 $VMKNetforVSAN = "Management Network"
-
-
 
 
 
@@ -30,6 +32,12 @@ if (-Not ($NewCluster = Get-Cluster $Cluster -ErrorAction SilentlyContinue))
    $NewCluster = New-Cluster -Name $Cluster -Location $NewDatacenter
    Get-Cluster -Name $Cluster
 }
+
+
+
+# ENABLING VSAN SERVICE ON CLUSTER
+Write-Host "Enabling vSAN Cluster Services..." -ForegroundColor Green
+Set-Cluster -Cluster $Cluster -VsanEnabled $true -Confirm:$false
 
 
 # ADD/REMOVE HOSTS ON THE CLUSTER
@@ -56,9 +64,8 @@ ElseIf ($InputfromUser -match "Remove")
         Remove-VMHost $esx -Confirm:$false
     }
 }
-Sleep-Progress 15
-Start-Sleep -Seconds 15
-
+# Sleep-Progress 15
+# Start-Sleep -Seconds 15
 
 
 
@@ -80,132 +87,89 @@ foreach ($esx in $ESXHosts)
 
 
 
-
-if($nConn -eq 3)
-{
-    # ENABLING VSAN SERVICE ON CLUSTER
-    Write-Host "Enabling vSAN Cluster Services..." -ForegroundColor Green
-    Set-Cluster -Cluster $Cluster -VsanEnabled $true -Confirm:$false
-
-
-    # CREATING vSWITCH AND ENABLING vSAN KERNEL
-    foreach ($esx in $ESXHosts)
-    {
-        Write-Host "Creating vSWitch on $esx..." -ForegroundColor Green
-        $vswitch = New-VirtualSwitch -VMHost $esx -Nic vmnic1, vmnic2 -Name "vSAN" -Mtu 9000
-        $adapter = New-VMHostNetworkAdapter -VMHost $esx -VirtualSwitch $vswitch -PortGroup "vSAN" -VsanTrafficEnabled $true -Mtu 9000
-    }
-    
-    
-    # WAIT FOR VMK ADAPTERS TO GET DHCP ASSIGNED IPs
-    Sleep-Progress 105
-    Start-Sleep -Seconds 105
-    
-    foreach ($esx in $ESXHosts)
-    {
-        Write-Host "VMKernel Adapters on $esx..." -ForegroundColor Green
-        Get-VMHost -Name $esx | Get-VMHostNetwork | Select-Object  -ExpandProperty VirtualNic | Sort-Object Name
-    }
-
-
-    # CREATING DISK GROUPS
-    foreach ($esx in $ESXHosts)
-    {
-        $VSANDisks = Get-VMHost -Name $esx | Get-ScsiLun | Where-Object {$_.VsanStatus -eq "Eligible"}
-
-        #CACHE AND CAPACITY DISKS
-        if ($VSANDisks.Count -gt 1)
-        {
-            $CacheDisks = @()
-            $CapacityDisks = @()
-            foreach($vsandisk in $VSANDisks)
-            {
-                if($vsandisk.IsSsd -eq $true -and $vsandisk.CapacityGB -lt "21")
-                {
-                    $CacheDisks += $vsandisk
-                }
-                else
-                {
-                    $CapacityDisks += $vsandisk
-                }
-            }
-        }
-
+# CREATING vSWITCH AND ENABLING vSAN KERNEL
 foreach ($esx in $ESXHosts)
 {
-
-}
-
-    }
-
-
+    Write-Host "Creating vSWitch on $esx..." -ForegroundColor Green
+    $vswitch = New-VirtualSwitch -VMHost $esx -Nic vmnic1, vmnic2 -Name "vSAN" -Mtu 9000
+    $adapter = New-VMHostNetworkAdapter -VMHost $esx -VirtualSwitch $vswitch -PortGroup "vSAN" -VsanTrafficEnabled $true -Mtu 9000
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
+# WAIT FOR VMK ADAPTERS TO GET DHCP ASSIGNED IPs
+# Sleep-Progress 105
+# Start-Sleep -Seconds 105  
+foreach ($esx in $ESXHosts)
+{
+    Write-Host "VMKernel Adapters on $esx..." -ForegroundColor Green
+    Get-VMHost -Name $esx | Get-VMHostNetwork | Select-Object  -ExpandProperty VirtualNic | Sort-Object Name
+}
 
 
 
 # CREATING DISK GROUPS
+foreach ($esx in $ESXHosts)
+{
+    $VSANDisks = Get-VMHost -Name $esx | Get-ScsiLun | Where-Object {$_.VsanStatus -eq "Eligible"}
 
+    #CACHE AND CAPACITY DISKS
+    if ($VSANDisks.Count -gt 1)
+    {
+        $CacheDisks = @()
+        $CapacityDisks = @()
+        foreach($vsandisk in $VSANDisks)
+        {
+            if($vsandisk.IsSsd -eq $true -and $vsandisk.CapacityGB -lt "35")
+            {
+                $CacheDisks += $vsandisk
+            }
+            else
+            {
+                    $CapacityDisks += $vsandisk
+            }
+        }
+    }
 
+        
+        
+    # MAXIMUM DISK CAPACITY PER DISK GROUP
+    # MAX CAP DISK = 1
+    if($CacheDisks.Count -eq 1)
+    {
+        $MaxCapDisks = 7
+    }
+    elseIf($CacheDisks.Count -gt 1 -and $CacheDisks.Count -lt 6)
+    {
+        $MaxCapDisks = [math]::floor($CapacityDisks.Count/$CacheDisks.Count)
+    }
 
+    # MAX CAP DISK = 2
+    $temp = [pscustomobject]@{value = $CapacityDisks.Count}
+    $DiskGroups = $CapacityDisks | Group-Object -Property {[math]::Ceiling($temp.value--/$MaxCapDisks)}
+    $esx
+    $DiskGroups | Format-Table
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#ADDING HOSTS TO THE CLUSTER
-$ESXHosts | Foreach {
-   Write-Host "Adding $($_) to $($NewCluster)"
-   
-   # Add them to the cluster
-   $AddedHost = Add-VMHost -Name $_ -Location $NewCluster -User $ESXUser -Password $ESXPWD -Force
-   
-   # Check to see if they have a VSAN enabled VMKernel
-#   $VMKernel = $AddedHost | Get-VMHostNetworkAdapter -VMKernel | Where {$_.PortGroupName -eq $VMKNetforVSAN }
-#   $IsVSANEnabled = $VMKernel | Where { $_.VsanTrafficEnabled}
-   
-   # If it isnt Enabled then Enable it
-#   If (-not $IsVSANEnabled) {
-#      Write-Host "Enabling VSAN Kernel on $VMKernel"
-#      $VMKernel | Set-VMHostNetworkAdapter -VsanTrafficEnabled $true -Confirm:$false | Out-Null
-#   } Else {
-#      Write-Host "VSAN Kernel already enabled on $VmKernel"
-#      $IsVSANEnabled | Select VMhost, DeviceName, IP, PortGroupName, VSANTrafficEnabled
-#   }
+    # ADDING DISK GROUPS
+    $a = 0
+    foreach($disks in $CacheDisks)
+    {
+        Write-Host "Added Disk Group"$a
+        New-VsanDiskGroup -VMHost $esx -SsdCanonicalName $disks -DataDiskCanonicalName $DiskGroups[$a].Group
+        $a += 1
+    }
 }
+
+
+
+# CREATING FAULT DOMAINS
+if($ESXHosts.Count -lt 5)
+{
+    $f = 1
+    foreach($esx in $ESXHosts)
+    {
+        New-VsanFaultDomain -VMHost $esx -Name "$FD$f"
+        $f++
+    }
+}
+
