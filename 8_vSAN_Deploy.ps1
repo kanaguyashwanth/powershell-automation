@@ -165,11 +165,11 @@ foreach ($esx in $ESXHosts)
 # CREATING FAULT DOMAINS
 if($ESXHosts.Count -lt 5)
 {
-    $f = 1
+    $n = 1
     foreach($esx in $ESXHosts)
     {
-        New-VsanFaultDomain -VMHost $esx -Name "$FD$f"
-        $f++
+        New-VsanFaultDomain -VMHost $esx -Name "$FD$n"
+        $n++
     }
 }
 
