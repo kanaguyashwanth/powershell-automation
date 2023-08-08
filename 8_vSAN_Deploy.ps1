@@ -50,7 +50,7 @@ if ($InputfromUser -match "Add")
         Write-Host "Adding host $esx to $($NewCluster)" -ForegroundColor Green
    
         # Add hosts to cluster
-        Add-VMHost -Name $esx -Location (Get-Datacenter $Datacenter) -User $ESXUser -Password $ESXPWD -Force -RunAsync -Confirm:$false
+        Add-VMHost -Name $esx -Location $Cluster -User $ESXUser -Password $ESXPWD -Force -RunAsync -Confirm:$false
    
     }
 }
