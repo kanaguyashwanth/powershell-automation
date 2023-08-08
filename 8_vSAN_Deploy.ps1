@@ -2,7 +2,7 @@
 
 
 
-Connect-VIServer 10.55.232.5 -User 'administrator@vsphere.local' -password 'Password@123' -Force
+Connect-VIServer 10.55.232.32 -User 'administrator@vsphere.local' -password 'Password@123' -Force
 
 
 
@@ -130,8 +130,9 @@ foreach ($esx in $ESXHosts)
             }
         }
     }
+}
 
-        
+       
         
 foreach($esx in $ESXHosts)
 {
