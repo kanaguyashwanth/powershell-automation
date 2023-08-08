@@ -133,13 +133,15 @@ foreach ($esx in $ESXHosts)
 
         
         
+foreach($esx in $ESXHosts)
+{
     # MAXIMUM DISK CAPACITY PER DISK GROUP
     # MAX CAP DISK = 1
     if($CacheDisks.Count -eq 1)
     {
         $MaxCapDisks = 7
     }
-    elseIf($CacheDisks.Count -gt 1 -and $CacheDisks.Count -lt 6)
+    elseif ($CacheDisks.Count -gt 1 -and $CacheDisks.Count -lt 6)
     {
         $MaxCapDisks = [math]::floor($CapacityDisks.Count/$CacheDisks.Count)
     }
@@ -149,6 +151,7 @@ foreach ($esx in $ESXHosts)
     $DiskGroups = $CapacityDisks | Group-Object -Property {[math]::Ceiling($temp.value--/$MaxCapDisks)}
     $esx
     $DiskGroups | Format-Table
+
 
     # ADDING DISK GROUPS
     $a = 0
@@ -172,4 +175,5 @@ if($ESXHosts.Count -lt 5)
         $n++
     }
 }
+
 
